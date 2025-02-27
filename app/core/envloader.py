@@ -33,7 +33,7 @@ class Environment:
 
     APP_TITLE: str = os.getenv("APP_TITLE", "FastAPI App")
     HOST: str = os.getenv("HOST", "0.0.0.0")
-    PORT: int = os.getenv("PORT", 8000)
+    PORT: int = os.getenv("PORT", "8000")
     if PORT.isdigit():
         PORT = int(PORT)
     else:
