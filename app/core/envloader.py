@@ -28,7 +28,7 @@ class Environment:
             )
         DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
 
-    DEBUG: bool = os.getenv("DEBUG").lower() == "true"
+    DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "DEBUG" if DEBUG else "INFO")
 
     APP_TITLE: str = os.getenv("APP_TITLE", "FastAPI App")
