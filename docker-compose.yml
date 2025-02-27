@@ -5,14 +5,24 @@ services:
       - "8001:8000"
     env_file:
       - .env
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      DEBUG: true
+      APP_TITLE: memedashboard
     depends_on:
       - db
     volumes:
       - logs:/app/logs
   db:
     image: postgres:13
-    env_file:
-      - .env
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
     volumes:
       - postgres_data:/var/lib/postgresql/data
     expose:
