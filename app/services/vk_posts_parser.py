@@ -543,6 +543,7 @@ async def parse_posts(session: AsyncSession, es_client: AsyncElasticsearch):
                 url=post.post_url,
                 likes=post.likes,
                 views=post.views,
+                date=post.date
             )
             
             session.add(db_post)

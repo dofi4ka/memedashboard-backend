@@ -50,7 +50,9 @@ async def search_memes(
                         description=post.description,
                         photos=post.photos,
                         likes=post.likes,
-                        views=post.views
+                        views=post.views,
+                        date=post.date,
+                        week=post.week
                     )
                 )
             

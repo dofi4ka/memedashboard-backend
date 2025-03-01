@@ -10,6 +10,7 @@ class Post(Base):
     __tablename__ = "posts"
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     week = Column(String)
+    date = Column(Integer)
     text = Column(String)
     description = Column(String)
     photos = Column(ARRAY(String))

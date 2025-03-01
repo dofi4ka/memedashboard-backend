@@ -10,3 +10,5 @@ class PostGet(BaseModel):
     photos: list[str]
     likes: int
     views: int
+    date: int
+    week: str
