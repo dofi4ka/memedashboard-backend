@@ -6,6 +6,17 @@ load_dotenv()
 
 
 class Environment:
+    VK_ACCESS_TOKEN: str = os.getenv("VK_ACCESS_TOKEN")
+    VK_GROUP_IDS: list[str] = os.getenv("VK_GROUP_IDS", "").split(",")
+    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY")
+
+    if not VK_ACCESS_TOKEN:
+        raise EnvironmentError("VK_ACCESS_TOKEN не задан")
+    if not VK_GROUP_IDS:
+        raise EnvironmentError("VK_GROUP_IDS не задан")
+    if not OPENAI_API_KEY:
+        raise EnvironmentError("OPENAI_API_KEY не задан")
+
     POSTGRES_USER: str = os.getenv("POSTGRES_USER")
     POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD")
     POSTGRES_DB: str = os.getenv("POSTGRES_DB")
