@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from collections import namedtuple
@@ -6,13 +7,16 @@ from io import BytesIO
 from textwrap import dedent
 from typing import Dict, List, Literal
 
+import aiohttp
 import imagehash
-import requests
+from elasticsearch import AsyncElasticsearch
 from openai import OpenAI
 from PIL import Image
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import Environment
+from app.models.post import Post, ProccedWeeks
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +27,7 @@ class MemeAnalysis(BaseModel):
     description: str
 
 
-class Post(BaseModel):
+class PostData(BaseModel):
     text: str
     photos: List[str]
     likes: int
@@ -35,25 +39,27 @@ class Post(BaseModel):
     def get_likes_per_view(self) -> float:
         return self.likes / self.views if self.views else 0
 
-    def calculate_first_photo_hash(self) -> imagehash.ImageHash:
-        response = requests.get(self.photos[0])
-        img = Image.open(BytesIO(response.content))
-        return imagehash.phash(img)
+    async def calculate_first_photo_hash(self) -> imagehash.ImageHash:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(self.photos[0]) as response:
+                content = await response.read()
+                img = Image.open(BytesIO(content))
+                return imagehash.phash(img)
 
 
-class AnalyzedPost(Post):
+class AnalyzedPost(PostData):
     analysis: MemeAnalysis
 
 
 class WeeklyPostsCollection(BaseModel):
-    posts: Dict[str, List[Post]]
+    posts: Dict[str, List[PostData]]
 
 
 class AnalyzedWeeklyPostsCollection(BaseModel):
     posts: Dict[str, List[AnalyzedPost]]
 
 
-def is_attachments_valid(
+async def is_attachments_valid(
     post: dict, max_photos_per_post: int
 ) -> list[str] | Literal[False]:
     """
@@ -91,7 +97,7 @@ def is_attachments_valid(
 WeekTimestamp = namedtuple("WeekTimestamp", ["start", "end", "week_key"])
 
 
-def get_weekly_timestamps(weeks: int = 1) -> list[WeekTimestamp]:
+async def get_weekly_timestamps(weeks: int = 1) -> list[WeekTimestamp]:
     """
     Генерирует временные метки для последних завершенных недель.
 
@@ -131,13 +137,14 @@ def get_weekly_timestamps(weeks: int = 1) -> list[WeekTimestamp]:
     return weekly_timestamps
 
 
-def get_weekly_posts_with_images(
+async def get_weekly_posts_with_images(
     access_token: str,
     group_ids: list[str],
     max_photos_per_post: int,
     weeks: int = 1,
     posts_per_week: int = 50,
     threshold: int = 5,
+    weekly_timestamps: list[WeekTimestamp] = None,
 ) -> WeeklyPostsCollection:
     """
     Получает еженедельные посты с изображениями из указанных групп ВКонтакте.
@@ -154,7 +161,8 @@ def get_weekly_posts_with_images(
     """
     logger.info("Начинаем получение постов с изображениями")
 
-    weekly_timestamps = get_weekly_timestamps(weeks)
+    if not weekly_timestamps:
+        weekly_timestamps = await get_weekly_timestamps(weeks)
 
     most_recent_timestamp = weekly_timestamps[0].end
     most_old_timestamp = weekly_timestamps[-1].start
@@ -177,21 +185,23 @@ def get_weekly_posts_with_images(
             logger.debug(
                 f"Выполняем API запрос для группы {group_id} на странице {page}"
             )
-            response = requests.get("https://api.vk.com/method/wall.get", params=params)
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    "https://api.vk.com/method/wall.get", params=params
+                ) as response:
+                    if response.status != 200:
+                        logger.error(
+                            f"HTTP ошибка для группы {group_id}: Код {response.status}, {await response.text()}"
+                        )
+                        break
 
-            if response.status_code != 200:
-                logger.error(
-                    f"HTTP ошибка для группы {group_id}: Код {response.status_code}, {response.text}"
-                )
-                break
-
-            try:
-                data = response.json()
-            except json.JSONDecodeError:
-                logger.error(
-                    f"Ошибка декодирования JSON для группы {group_id}: {response.text}"
-                )
-                break
+                    try:
+                        data = await response.json()
+                    except json.JSONDecodeError:
+                        logger.error(
+                            f"Ошибка декодирования JSON для группы {group_id}: {await response.text()}"
+                        )
+                        break
 
             if not data["response"].get("items"):
                 logger.debug(f"Больше постов не найдено для группы {group_id}")
@@ -212,7 +222,7 @@ def get_weekly_posts_with_images(
                 if post["date"] > most_recent_timestamp:
                     continue
 
-                if photos := is_attachments_valid(post, max_photos_per_post):
+                if photos := await is_attachments_valid(post, max_photos_per_post):
                     post_info = {
                         "text": post.get("text", ""),
                         "photos": photos,
@@ -222,7 +232,7 @@ def get_weekly_posts_with_images(
                         "group_id": group_id,
                         "post_url": f"https://vk.com/wall-{group_id}_{post['id']}",
                     }
-                    filtered_posts.append(Post(**post_info))
+                    filtered_posts.append(PostData(**post_info))
                     logger.debug(
                         f"Добавлен пост из группы {group_id} с датой {post['date']}"
                     )
@@ -253,12 +263,12 @@ def get_weekly_posts_with_images(
                 posts_by_weeks.posts[week_timestamp.week_key].append(post)
                 break
 
-    return remove_duplicates(
-        get_most_relevant_posts(posts_by_weeks, posts_per_week), threshold
+    return await remove_duplicates(
+        await get_most_relevant_posts(posts_by_weeks, posts_per_week), threshold
     )
 
 
-def get_most_relevant_posts(
+async def get_most_relevant_posts(
     weekly_posts: WeeklyPostsCollection, posts_per_week: int
 ) -> WeeklyPostsCollection:
     """
@@ -292,7 +302,7 @@ def get_most_relevant_posts(
     return most_relevant_posts
 
 
-def remove_duplicates(
+async def remove_duplicates(
     weekly_posts: WeeklyPostsCollection, threshold: float = 5
 ) -> WeeklyPostsCollection:
     """
@@ -318,7 +328,7 @@ def remove_duplicates(
                 if not post.photos:
                     continue
 
-                img_hash = post.calculate_first_photo_hash()
+                img_hash = await post.calculate_first_photo_hash()
                 if img_hash:
                     post_hashes[i] = img_hash
 
@@ -351,7 +361,7 @@ def remove_duplicates(
 
                 best_post = max(similar_posts, key=lambda p: p.likes)
 
-                merged_post = Post(
+                merged_post = PostData(
                     text=best_post.text,
                     photos=best_post.photos,
                     likes=total_likes,
@@ -378,7 +388,7 @@ def remove_duplicates(
     return result
 
 
-def analyze_post(post: Post, openai_client: OpenAI) -> AnalyzedPost:
+async def analyze_post(post: PostData, openai_client: OpenAI) -> AnalyzedPost:
     content = [{"type": "text", "text": post.text}] + [
         {"type": "image_url", "image_url": {"url": photo, "detail": "low"}}
         for photo in post.photos
@@ -386,7 +396,8 @@ def analyze_post(post: Post, openai_client: OpenAI) -> AnalyzedPost:
 
     logger.debug(f"Отправка запроса к API OpenAI для поста {post.post_url}")
     try:
-        response = openai_client.beta.chat.completions.parse(
+        response = await asyncio.to_thread(
+            openai_client.beta.chat.completions.parse,
             model="gpt-4o-mini",
             messages=[
                 {
@@ -396,7 +407,7 @@ def analyze_post(post: Post, openai_client: OpenAI) -> AnalyzedPost:
                     You are a helpful assistant that analyzes images and provides information about them.
                     is_meme: true if the image is a meme or a meme-like image, false if it news, report, advertisement or something else.
                     nsfw: true if the image has any uncensored bad words or explicit content, false otherwise.
-                    description: very detailed. image, situation, humor, key elements. If you found some text, quote it in the description. Use provided text as context.
+                    description: very detailed. image, situation, humor, key elements. If you found some text, quote it in the description. If image can be related to some event write it in the description. Use provided text as context.
                     Answer in Russian.
                     """
                     ),
@@ -441,7 +452,7 @@ def analyze_post(post: Post, openai_client: OpenAI) -> AnalyzedPost:
         )
 
 
-def analyze_posts(posts: WeeklyPostsCollection) -> AnalyzedWeeklyPostsCollection:
+async def analyze_posts(posts: WeeklyPostsCollection) -> AnalyzedWeeklyPostsCollection:
     logger.debug("Начинаем анализ постов")
 
     logger.debug("Инициализируем OpenAI API")
@@ -453,9 +464,18 @@ def analyze_posts(posts: WeeklyPostsCollection) -> AnalyzedWeeklyPostsCollection
 
     for week, week_posts in posts.posts.items():
         filtered_posts = []
+        tasks = []
         for post in week_posts:
+            tasks.append(analyze_post(post, client))
+
+        analyzed_posts = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for analyzed_post in analyzed_posts:
+            if isinstance(analyzed_post, Exception):
+                logger.error(f"Ошибка при анализе поста: {str(analyzed_post)}")
+                continue
+
             try:
-                analyzed_post = analyze_post(post, client)
                 if (
                     hasattr(analyzed_post, "analysis")
                     and analyzed_post.analysis.is_meme
@@ -470,7 +490,7 @@ def analyze_posts(posts: WeeklyPostsCollection) -> AnalyzedWeeklyPostsCollection
                         f"Пост {analyzed_post.post_url} не прошел фильтрацию: не мем или NSFW"
                     )
             except Exception as e:
-                logger.error(f"Ошибка при анализе поста {post.post_url}: {str(e)}")
+                logger.error(f"Ошибка при обработке результата анализа: {str(e)}")
 
         result.posts[week] = filtered_posts
         logger.info(
@@ -481,13 +501,67 @@ def analyze_posts(posts: WeeklyPostsCollection) -> AnalyzedWeeklyPostsCollection
     return result
 
 
+async def parse_posts(session: AsyncSession, es_client: AsyncElasticsearch):
+    weekly_timestamps = await get_weekly_timestamps(Environment.PARSE_WEEKS_COUNT)
+    weekly_timestamps_to_parse = []
+    for week_timestamp in weekly_timestamps:
+        existing_week = await session.get(ProccedWeeks, week_timestamp.week_key)
+        if existing_week and existing_week.procced:
+            logger.info(
+                f"Неделя {week_timestamp.week_key} уже была обработана ранее, пропускаем"
+            )
+            continue
+        weekly_timestamps_to_parse.append(week_timestamp)
+
+    if not weekly_timestamps_to_parse:
+        logger.info("Нечего парсить, все недели уже были обработаны")
+        return
+
+    posts = await get_weekly_posts_with_images(
+        group_ids=Environment.VK_GROUP_IDS,
+        access_token=Environment.VK_ACCESS_TOKEN,
+        max_photos_per_post=Environment.PARSE_MAX_PHOTOS_PER_POST,
+        weeks=Environment.PARSE_WEEKS_COUNT,
+        posts_per_week=Environment.PARSE_POSTS_PER_WEEK,
+        threshold=5,
+        weekly_timestamps=weekly_timestamps_to_parse,
+    )
+    analyzed_posts = await analyze_posts(posts)
+    
+    for week, week_posts in analyzed_posts.posts.items():
+        logger.info(f"Обработка постов для недели {week}")
+        procced_week = ProccedWeeks(week=week, procced=True)
+        
+        session.add(procced_week)
+        
+        for post in week_posts:
+            db_post = Post(
+                week=week,
+                text=post.text,
+                description=post.analysis.description,
+                photos=post.photos,
+                url=post.post_url,
+                likes=post.likes,
+                views=post.views,
+            )
+            
+            session.add(db_post)
+            await session.commit()
+            
+            await es_client.index(index="memes", body={
+                "id": str(db_post.id),
+                "title": post.text,
+                "description": post.analysis.description
+            })
+
+
 if __name__ == "__main__":
     posts = get_weekly_posts_with_images(
         access_token=Environment.VK_ACCESS_TOKEN,
         group_ids=Environment.VK_GROUP_IDS,
-        max_photos_per_post=1,
-        weeks=1,
-        posts_per_week=50,
+        max_photos_per_post=Environment.PARSE_MAX_PHOTOS_PER_POST,
+        weeks=Environment.PARSE_WEEKS_COUNT,
+        posts_per_week=Environment.PARSE_POSTS_PER_WEEK,
     )
 
     analyzed_posts = analyze_posts(posts)

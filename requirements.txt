@@ -2,5 +2,10 @@ fastapi
 uvicorn
 sqlalchemy
 psycopg2-binary
+asyncpg
 pydantic
 python-dotenv
+aiohttp
+openai
+imagehash
+elasticsearch

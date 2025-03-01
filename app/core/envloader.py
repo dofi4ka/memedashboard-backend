@@ -21,7 +21,7 @@ class Environment:
     POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD")
     POSTGRES_DB: str = os.getenv("POSTGRES_DB")
     POSTGRES_HOST: str = os.getenv("POSTGRES_HOST")
-    POSTGRES_PORT: int = os.getenv("POSTGRES_PORT")
+    POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", "5432"))
     DATABASE_URL: str = os.getenv("DATABASE_URL")
 
     if not DATABASE_URL:
@@ -37,15 +37,19 @@ class Environment:
             raise EnvironmentError(
                 "Не заданы обязательные переменные окружения для подключения к базе данных"
             )
-        DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
+        DATABASE_URL = f"postgresql+asyncpg://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
+
+    ELASTICSEARCH_URL: str = os.getenv("ELASTICSEARCH_URL")
+    if not ELASTICSEARCH_URL:
+        raise EnvironmentError("ELASTICSEARCH_URL не задан")
+
+    PARSE_WEEKS_COUNT = int(os.getenv("PARSE_WEEKS_COUNT", "1"))
+    PARSE_POSTS_PER_WEEK = int(os.getenv("PARSE_POSTS_PER_WEEK", "50"))
+    PARSE_MAX_PHOTOS_PER_POST = int(os.getenv("PARSE_MAX_PHOTOS_PER_POST", "1"))
 
     DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "DEBUG" if DEBUG else "INFO")
 
     APP_TITLE: str = os.getenv("APP_TITLE", "FastAPI App")
     HOST: str = os.getenv("HOST", "0.0.0.0")
-    PORT: int = os.getenv("PORT", "8000")
-    if PORT.isdigit():
-        PORT = int(PORT)
-    else:
-        raise EnvironmentError("PORT должен быть числом")
+    PORT = int(os.getenv("PORT", "8000"))
