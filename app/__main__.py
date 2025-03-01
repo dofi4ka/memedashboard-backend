@@ -5,6 +5,7 @@ from app import Environment
 from app.core.logging import configure_logging
 from app.db.session import init_db, get_db, get_es_client, init_elasticsearch
 from app.routers.search import search_router
+from app.routers.post import post_router
 from app.utils.advanced_logger import AdvancedLogger
 
 configure_logging()
@@ -46,7 +47,7 @@ async def lifespan(app: FastAPI):
     app.state.es_client = es_client
     
     # Предоставляем зависимости для роутов
-    app.dependency_overrides[get_db] = get_db(async_session)
+    app.dependency_overrides[get_db] = get_db()
     app.dependency_overrides[get_es_client] = lambda: es_client
     
     logger.info("Приложение запущено, зависимости инициализированы")
@@ -71,8 +72,8 @@ async def lifespan(app: FastAPI):
         logger.info("Приложение остановлено, ресурсы освобождены")
 
 
-app = FastAPI(title=Environment.APP_TITLE, debug=Environment.DEBUG, lifespan=lifespan)
+app = FastAPI(title=Environment.APP_TITLE, debug=Environment.DEBUG, lifespan=lifespan, root_path="/api")
 
 app.include_router(search_router)
-
+app.include_router(post_router)
 uvicorn.run(app, host=Environment.HOST, port=Environment.PORT, log_config=None)

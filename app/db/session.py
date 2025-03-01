@@ -1,5 +1,3 @@
-import logging
-
 from elasticsearch import AsyncElasticsearch
 from sqlalchemy import MetaData
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -7,6 +5,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 from app import Environment
+from app.utils.advanced_logger import AdvancedLogger
 
 engine = create_async_engine(Environment.DATABASE_URL, pool_pre_ping=True)
 AsyncSessionLocal = sessionmaker(
@@ -14,7 +13,7 @@ AsyncSessionLocal = sessionmaker(
 )
 
 
-logger = logging.getLogger(__name__)
+logger = AdvancedLogger(__name__)
 
 metadata = MetaData()
 Base = declarative_base(metadata=metadata)
@@ -29,22 +28,22 @@ async def init_db(session: AsyncSession):
 
         import_module("app.models.post")
         
-        # Используем глобальный engine вместо сессии для создания таблиц
         async with engine.begin() as conn:
             await conn.run_sync(lambda conn: metadata.create_all(conn))
             
         logger.info("База данных инициализирована успешно")
     except Exception as e:
-        logger.error(f"Ошибка при инициализации базы данных: {str(e)}")
+        logger.error("Ошибка при инициализации базы данных", error=str(e))
         raise
 
 
-def get_db(session_factory):
+def get_db():
     """
-    Возвращает функцию зависимости, которая создает сессию базы данных.
+    Возвращает асинхронный генератор сессии базы данных.
+    Использует глобальный AsyncSessionLocal.
     """
     async def _get_db():
-        async with session_factory() as db:
+        async with AsyncSessionLocal() as db:
             try:
                 yield db
             finally:
@@ -101,5 +100,5 @@ async def init_elasticsearch(es_client: AsyncElasticsearch):
             logger.info("Индекс 'memes' в Elasticsearch уже существует")
             
     except Exception as e:
-        logger.error(f"Ошибка при инициализации Elasticsearch: {str(e)}")
+        logger.error("Ошибка при инициализации Elasticsearch", error=str(e))
         raise

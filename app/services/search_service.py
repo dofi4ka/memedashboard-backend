@@ -1,11 +1,16 @@
 import logging
 from typing import List, Tuple
+import uuid
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from elasticsearch import AsyncElasticsearch
+from sqlalchemy.future import select
+
 from app.models.post import Post
 from app.schemas.post import PostGet
+from app.utils.advanced_logger import AdvancedLogger
 
-logger = logging.getLogger(__name__)
+logger = AdvancedLogger(__name__)
 
 async def search_memes(
     db: AsyncSession,
@@ -27,37 +32,49 @@ async def search_memes(
             "size": limit
         }
         
-        logger.debug(f"Выполняем поисковый запрос: {search_body}")
+        logger.debug("Выполняем поисковый запрос", search_body=search_body)
         response = await es_client.search(index="memes", body=search_body)
         
         total = response["hits"]["total"]["value"]
-        logger.info(f"Найдено {total} результатов для запроса '{query}'")
+        logger.info("Найдено результатов", count=total, query=query)
         
         post_ids = [hit["_source"]["id"] for hit in response["hits"]["hits"]]
         
-        logger.info(f"Найдены посты: {post_ids}")
         if not post_ids:
             return [], total
             
         results = []
         for post_id in post_ids:
-            post = await db.get(Post, post_id)
-            if post:
-                results.append(
-                    PostGet(
-                        id=post.id,
-                        text=post.text,
-                        description=post.description,
-                        photos=post.photos,
-                        likes=post.likes,
-                        views=post.views,
-                        date=post.date,
-                        week=post.week
+            try:
+                if post_id == 'None' or post_id is None:
+                    logger.warning("Пропускаем недействительный post_id", post_id=post_id)
+                    continue
+                
+                uuid.UUID(post_id)
+                
+                stmt = select(Post).where(Post.id == post_id)
+                result = await db.execute(stmt)
+                post = result.scalar_one_or_none()
+                
+                if post:
+                    results.append(
+                        PostGet(
+                            id=post.id,
+                            text=post.text,
+                            description=post.description,
+                            photos=post.photos,
+                            likes=post.likes,
+                            views=post.views,
+                            date=post.date,
+                            week=post.week
+                        )
                     )
-                )
+            except (ValueError, TypeError) as e:
+                logger.error("Ошибка при обработке post_id", post_id=post_id, error=str(e))
+                continue
             
         return results, total
         
     except Exception as e:
-        logger.error(f"Ошибка при поиске мемов: {str(e)}")
+        logger.error("Ошибка при поиске мемов", error=str(e))
         raise

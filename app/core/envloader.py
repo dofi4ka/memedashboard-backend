@@ -34,14 +34,23 @@ class Environment:
                 POSTGRES_DB,
             ]
         ):
-            raise EnvironmentError(
-                "Не заданы обязательные переменные окружения для подключения к базе данных"
-            )
+            raise EnvironmentError("DATABASE_URL или POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DB не заданы")
         DATABASE_URL = f"postgresql+asyncpg://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
 
     ELASTICSEARCH_URL: str = os.getenv("ELASTICSEARCH_URL")
+    ELASTICSEARCH_HOST: str = os.getenv("ELASTICSEARCH_HOST")
+    ELASTICSEARCH_PORT: int = int(os.getenv("ELASTICSEARCH_PORT", "9200"))
+
     if not ELASTICSEARCH_URL:
-        raise EnvironmentError("ELASTICSEARCH_URL не задан")
+        if not all(
+            [
+                ELASTICSEARCH_HOST,
+                ELASTICSEARCH_PORT,
+            ]
+        ):
+            raise EnvironmentError("ELASTICSEARCH_URL или ELASTICSEARCH_HOST и ELASTICSEARCH_PORT не заданы")
+
+        ELASTICSEARCH_URL = f"http://{ELASTICSEARCH_HOST}:{ELASTICSEARCH_PORT}"
 
     PARSE_WEEKS_COUNT = int(os.getenv("PARSE_WEEKS_COUNT", "1"))
     PARSE_POSTS_PER_WEEK = int(os.getenv("PARSE_POSTS_PER_WEEK", "50"))

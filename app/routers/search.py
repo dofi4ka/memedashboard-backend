@@ -1,4 +1,3 @@
-import logging
 from typing import List, Optional
 
 from elasticsearch import AsyncElasticsearch
@@ -8,10 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db, get_es_client
 from app.schemas.post import PostGet
 from app.services.search_service import search_memes
+from app.utils.advanced_logger import AdvancedLogger
 
 search_router = APIRouter()
 
-logger = logging.getLogger(__name__)
+logger = AdvancedLogger(__name__)
 
 
 @search_router.get("/search", response_model=list[PostGet])
@@ -24,5 +24,5 @@ async def search_endpoint(
 ):
     offset = (page - 1) * page_size
     results, total = await search_memes(db, es_client, query, page_size, offset)
-    logger.info(f"Найдено {total} результатов для запроса '{query}'")
+    logger.info("Найдено результатов для запроса", total=total, query=query)
     return results

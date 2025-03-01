@@ -1,6 +1,5 @@
 import asyncio
 import json
-import logging
 from collections import namedtuple
 from datetime import datetime, timedelta
 from io import BytesIO
@@ -17,8 +16,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import Environment
 from app.models.post import Post, ProccedWeeks
+from app.utils.advanced_logger import AdvancedLogger
 
-logger = logging.getLogger(__name__)
+logger = AdvancedLogger(__name__)
 
 
 class MemeAnalysis(BaseModel):
@@ -83,7 +83,9 @@ async def is_attachments_valid(
     ]
     if len(photos) > max_photos_per_post or len(photos) == 0:
         logger.debug(
-            f"Пост имеет слишком много фото: {len(photos)} > {max_photos_per_post}"
+            "Пост имеет слишком много фото",
+            photos_count=len(photos),
+            max_photos=max_photos_per_post
         )
         return False
 
@@ -170,7 +172,7 @@ async def get_weekly_posts_with_images(
     filtered_posts = []
 
     for group_id in group_ids:
-        logger.info(f"Обработка группы с ID: {group_id}")
+        logger.info("Обработка группы", group_id=group_id)
         page = 0
         while True:
             params = {
@@ -183,7 +185,7 @@ async def get_weekly_posts_with_images(
             }
 
             logger.debug(
-                f"Выполняем API запрос для группы {group_id} на странице {page}"
+                "Выполняем API запрос для группы", group_id=group_id, page=page
             )
             async with aiohttp.ClientSession() as session:
                 async with session.get(
@@ -191,7 +193,10 @@ async def get_weekly_posts_with_images(
                 ) as response:
                     if response.status != 200:
                         logger.error(
-                            f"HTTP ошибка для группы {group_id}: Код {response.status}, {await response.text()}"
+                            "HTTP ошибка для группы",
+                            group_id=group_id,
+                            status_code=response.status,
+                            response_text=await response.text()
                         )
                         break
 
@@ -199,12 +204,14 @@ async def get_weekly_posts_with_images(
                         data = await response.json()
                     except json.JSONDecodeError:
                         logger.error(
-                            f"Ошибка декодирования JSON для группы {group_id}: {await response.text()}"
+                            "Ошибка декодирования JSON для группы",
+                            group_id=group_id,
+                            response_text=await response.text()
                         )
                         break
 
             if not data["response"].get("items"):
-                logger.debug(f"Больше постов не найдено для группы {group_id}")
+                logger.debug("Больше постов не найдено для группы", group_id=group_id)
                 break
 
             should_break = False
@@ -214,7 +221,7 @@ async def get_weekly_posts_with_images(
             for post in posts:
                 if post["date"] < most_old_timestamp:
                     logger.debug(
-                        f"Достигнуты посты после конечной даты для группы {group_id}"
+                        "Достигнуты посты после конечной даты для группы", group_id=group_id
                     )
                     should_break = True
                     break
@@ -234,7 +241,7 @@ async def get_weekly_posts_with_images(
                     }
                     filtered_posts.append(PostData(**post_info))
                     logger.debug(
-                        f"Добавлен пост из группы {group_id} с датой {post['date']}"
+                        "Добавлен пост из группы", group_id=group_id, date=post['date']
                     )
 
             if should_break:
@@ -244,12 +251,15 @@ async def get_weekly_posts_with_images(
 
             if page >= 50:
                 logger.warning(
-                    f"Достигнут максимальный сдвиг (5000) для группы {group_id}"
+                    "Достигнут максимальный сдвиг (5000) для группы", group_id=group_id
                 )
                 break
 
     logger.info(
-        f"Обработка завершена. Всего собрано постов: {len(filtered_posts)}, недель: {len(weekly_timestamps)}, постов в неделю: {len(filtered_posts) / len(weekly_timestamps)}"
+        "Обработка завершена",
+        total_posts=len(filtered_posts),
+        weeks_count=len(weekly_timestamps),
+        posts_per_week=len(filtered_posts) / len(weekly_timestamps)
     )
 
     filtered_posts.sort(key=lambda post: post.date)
@@ -281,7 +291,7 @@ async def get_most_relevant_posts(
     Returns:
         WeeklyPostsCollection: Словарь с отфильтрованными наиболее релевантными постами для каждой недели.
     """
-    logger.info(f"Выбираем {posts_per_week} самых релевантных постов для каждой недели")
+    logger.info("Выбираем самых релевантных постов для каждой недели", posts_per_week=posts_per_week)
 
     most_relevant_posts = WeeklyPostsCollection(
         posts={week_key: [] for week_key in weekly_posts.posts.keys()}
@@ -297,7 +307,11 @@ async def get_most_relevant_posts(
             else 0
         )
         logger.debug(
-            f"Неделя {week_key}: отобрано {len(most_relevant_posts.posts[week_key])} из {len(week_posts)} постов ({percentage:.2f}%)"
+            "Неделя: отобрано постов",
+            week=week_key,
+            selected_posts=len(most_relevant_posts.posts[week_key]),
+            total_posts=len(week_posts),
+            percentage=f"{percentage:.2f}%"
         )
     return most_relevant_posts
 
@@ -320,7 +334,7 @@ async def remove_duplicates(
     )
 
     for week, week_posts in weekly_posts.posts.items():
-        logger.info(f"Удаление дубликатов в неделе {week}")
+        logger.info("Удаление дубликатов в неделе", week=week)
 
         post_hashes = {}
         for i, post in enumerate(week_posts):
@@ -334,7 +348,9 @@ async def remove_duplicates(
 
             except Exception as e:
                 logger.error(
-                    f"Ошибка при обработке изображения из поста {post.post_url}: {e}"
+                    "Ошибка при обработке изображения из поста",
+                    post_url=post.post_url,
+                    error=str(e)
                 )
 
         processed_indices = set()
@@ -372,7 +388,7 @@ async def remove_duplicates(
                 )
 
                 merged_posts.append(merged_post)
-                logger.debug(f"Объединено {len(similar_posts)} похожих постов в один")
+                logger.debug("Объединено похожих постов в один", count=len(similar_posts))
             else:
                 merged_posts.append(similar_posts[0])
 
@@ -382,7 +398,10 @@ async def remove_duplicates(
 
         result.posts[week] = merged_posts
         logger.info(
-            f"Неделя {week}: после удаления дубликатов осталось {len(merged_posts)} постов из {len(week_posts)}"
+            "Неделя: после удаления дубликатов",
+            week=week,
+            remaining_posts=len(merged_posts),
+            original_posts=len(week_posts)
         )
 
     return result
@@ -394,7 +413,7 @@ async def analyze_post(post: PostData, openai_client: OpenAI) -> AnalyzedPost:
         for photo in post.photos
     ]
 
-    logger.debug(f"Отправка запроса к API OpenAI для поста {post.post_url}")
+    logger.debug("Отправка запроса к API OpenAI для поста", post_url=post.post_url)
     try:
         response = await asyncio.to_thread(
             openai_client.beta.chat.completions.parse,
@@ -417,9 +436,11 @@ async def analyze_post(post: PostData, openai_client: OpenAI) -> AnalyzedPost:
             response_format=MemeAnalysis,
         )
         analysis = response.choices[0].message.parsed
-        logger.info(f"Анализ поста {post.post_url}: {analysis}")
+        logger.info("Анализ поста", post_url=post.post_url, analysis=analysis)
         logger.debug(
-            f"Успешно обработан пост {post.post_url}. Использовано токенов: {response.usage.total_tokens}"
+            "Успешно обработан пост",
+            post_url=post.post_url,
+            tokens_used=response.usage.total_tokens
         )
         return AnalyzedPost(
             text=post.text,
@@ -433,7 +454,9 @@ async def analyze_post(post: PostData, openai_client: OpenAI) -> AnalyzedPost:
         )
     except Exception as e:
         logger.error(
-            f"Ошибка в запросе к API OpenAI для поста {post.post_url}: {str(e)}"
+            "Ошибка в запросе к API OpenAI для поста",
+            post_url=post.post_url,
+            error=str(e)
         )
         default_analysis = MemeAnalysis(
             is_meme=False,
@@ -472,7 +495,7 @@ async def analyze_posts(posts: WeeklyPostsCollection) -> AnalyzedWeeklyPostsColl
 
         for analyzed_post in analyzed_posts:
             if isinstance(analyzed_post, Exception):
-                logger.error(f"Ошибка при анализе поста: {str(analyzed_post)}")
+                logger.error("Ошибка при анализе поста", error=str(analyzed_post))
                 continue
 
             try:
@@ -483,18 +506,21 @@ async def analyze_posts(posts: WeeklyPostsCollection) -> AnalyzedWeeklyPostsColl
                 ):
                     filtered_posts.append(analyzed_post)
                     logger.debug(
-                        f"Добавлен мем {analyzed_post.post_url} в отфильтрованные посты"
+                        "Добавлен мем в отфильтрованные посты", post_url=analyzed_post.post_url
                     )
                 else:
                     logger.debug(
-                        f"Пост {analyzed_post.post_url} не прошел фильтрацию: не мем или NSFW"
+                        "Пост не прошел фильтрацию: не мем или NSFW", post_url=analyzed_post.post_url
                     )
             except Exception as e:
-                logger.error(f"Ошибка при обработке результата анализа: {str(e)}")
+                logger.error("Ошибка при обработке результата анализа", error=str(e))
 
         result.posts[week] = filtered_posts
         logger.info(
-            f"Неделя {week}: отфильтровано {len(filtered_posts)} мемов из {len(week_posts)} постов"
+            "Неделя: отфильтровано мемов",
+            week=week,
+            memes_count=len(filtered_posts),
+            total_posts=len(week_posts)
         )
 
     logger.debug("Анализ постов завершен")
@@ -508,7 +534,7 @@ async def parse_posts(session: AsyncSession, es_client: AsyncElasticsearch):
         existing_week = await session.get(ProccedWeeks, week_timestamp.week_key)
         if existing_week and existing_week.procced:
             logger.info(
-                f"Неделя {week_timestamp.week_key} уже была обработана ранее, пропускаем"
+                "Неделя уже была обработана ранее, пропускаем", week=week_timestamp.week_key
             )
             continue
         weekly_timestamps_to_parse.append(week_timestamp)
@@ -529,7 +555,7 @@ async def parse_posts(session: AsyncSession, es_client: AsyncElasticsearch):
     analyzed_posts = await analyze_posts(posts)
     
     for week, week_posts in analyzed_posts.posts.items():
-        logger.info(f"Обработка постов для недели {week}")
+        logger.info("Обработка постов для недели", week=week)
         procced_week = ProccedWeeks(week=week, procced=True)
         
         session.add(procced_week)
@@ -570,4 +596,4 @@ if __name__ == "__main__":
     with open("analyzed_posts.json", "w", encoding="utf-8") as f:
         json.dump(analyzed_posts.model_dump(), f, ensure_ascii=False, indent=4)
 
-    logger.info(f"Анализ завершен. Результаты сохранены в analyzed_posts.json")
+    logger.info("Анализ завершен. Результаты сохранены в analyzed_posts.json")
