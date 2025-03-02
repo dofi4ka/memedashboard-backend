@@ -66,6 +66,7 @@ topics = {
     ),
 }
 
+
 def validate_topic(topic: str) -> str:
     topic = topic.lower().strip()
     if topic not in topics:

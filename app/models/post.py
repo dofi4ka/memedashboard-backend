@@ -19,6 +19,7 @@ class Post(Base):
     views = Column(Integer)
     topic = Column(String)
 
+
 class ProccedWeeks(Base):
     __tablename__ = "procced_weeks"
     week = Column(String, primary_key=True)

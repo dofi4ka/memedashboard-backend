@@ -1,9 +1,9 @@
 import logging
-from typing import List, Tuple
 import uuid
+from typing import List, Tuple
 
-from sqlalchemy.ext.asyncio import AsyncSession
 from elasticsearch import AsyncElasticsearch
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.models.post import Post

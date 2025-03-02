@@ -6,7 +6,6 @@ from io import BytesIO
 from textwrap import dedent
 from typing import Dict, List, Literal
 
-
 import aiohttp
 import imagehash
 from elasticsearch import AsyncElasticsearch
