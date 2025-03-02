@@ -17,7 +17,7 @@ class Post(Base):
     url = Column(String)
     likes = Column(Integer)
     views = Column(Integer)
-
+    topic = Column(String)
 
 class ProccedWeeks(Base):
     __tablename__ = "procced_weeks"

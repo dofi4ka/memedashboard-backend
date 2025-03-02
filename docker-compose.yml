@@ -21,12 +21,12 @@ services:
       elasticsearch:
         condition: service_healthy
     volumes:
-      - logs:/app/logs
+      - ./logs:/app/logs
     networks:
       - app-network
     
   frontend:
-    image: ghcr.io/dofi4ka/memedashboard-backend:latest
+    image: ghcr.io/dofi4ka/memedashboard-frontend:latest
     expose:
       - "3000"
     networks:
@@ -83,7 +83,6 @@ services:
 
 volumes:
   postgres_data:
-  logs:
   elasticsearch_data:
 
 networks:

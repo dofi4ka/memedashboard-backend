@@ -12,3 +12,4 @@ class PostGet(BaseModel):
     views: int
     date: int
     week: str
+    topic: str

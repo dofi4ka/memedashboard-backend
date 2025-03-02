@@ -34,7 +34,9 @@ class Environment:
                 POSTGRES_DB,
             ]
         ):
-            raise EnvironmentError("DATABASE_URL или POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DB не заданы")
+            raise EnvironmentError(
+                "DATABASE_URL или POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DB не заданы"
+            )
         DATABASE_URL = f"postgresql+asyncpg://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
 
     ELASTICSEARCH_URL: str = os.getenv("ELASTICSEARCH_URL")
@@ -48,7 +50,9 @@ class Environment:
                 ELASTICSEARCH_PORT,
             ]
         ):
-            raise EnvironmentError("ELASTICSEARCH_URL или ELASTICSEARCH_HOST и ELASTICSEARCH_PORT не заданы")
+            raise EnvironmentError(
+                "ELASTICSEARCH_URL или ELASTICSEARCH_HOST и ELASTICSEARCH_PORT не заданы"
+            )
 
         ELASTICSEARCH_URL = f"http://{ELASTICSEARCH_HOST}:{ELASTICSEARCH_PORT}"
 

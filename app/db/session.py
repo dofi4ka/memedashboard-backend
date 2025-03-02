@@ -27,10 +27,10 @@ async def init_db(session: AsyncSession):
         from importlib import import_module
 
         import_module("app.models.post")
-        
+
         async with engine.begin() as conn:
             await conn.run_sync(lambda conn: metadata.create_all(conn))
-            
+
         logger.info("База данных инициализирована успешно")
     except Exception as e:
         logger.error("Ошибка при инициализации базы данных", error=str(e))
@@ -42,12 +42,14 @@ def get_db():
     Возвращает асинхронный генератор сессии базы данных.
     Использует глобальный AsyncSessionLocal.
     """
+
     async def _get_db():
         async with AsyncSessionLocal() as db:
             try:
                 yield db
             finally:
                 await db.close()
+
     return _get_db
 
 
@@ -62,7 +64,7 @@ async def init_elasticsearch(es_client: AsyncElasticsearch):
     try:
         # Проверяем, существует ли индекс
         index_exists = await es_client.indices.exists(index="memes")
-        
+
         if not index_exists:
             # Настройки индекса
             settings = {
@@ -74,31 +76,31 @@ async def init_elasticsearch(es_client: AsyncElasticsearch):
                             "russian_analyzer": {
                                 "type": "custom",
                                 "tokenizer": "standard",
-                                "filter": ["lowercase", "russian_stemmer"]
+                                "filter": ["lowercase", "russian_stemmer"],
                             }
                         },
                         "filter": {
                             "russian_stemmer": {
                                 "type": "stemmer",
-                                "language": "russian"
+                                "language": "russian",
                             }
-                        }
-                    }
+                        },
+                    },
                 },
                 "mappings": {
                     "properties": {
                         "id": {"type": "keyword"},
                         "title": {"type": "text", "analyzer": "russian_analyzer"},
-                        "description": {"type": "text", "analyzer": "russian_analyzer"}
+                        "description": {"type": "text", "analyzer": "russian_analyzer"},
                     }
-                }
+                },
             }
-            
+
             await es_client.indices.create(index="memes", body=settings)
             logger.info("Индекс 'memes' в Elasticsearch создан успешно")
         else:
             logger.info("Индекс 'memes' в Elasticsearch уже существует")
-            
+
     except Exception as e:
         logger.error("Ошибка при инициализации Elasticsearch", error=str(e))
         raise
