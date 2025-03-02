@@ -39,11 +39,6 @@ topics = {
         chatgpt_description="Memes referencing movies, TV shows, or cinematic characters. Examples include quotes or scenes from popular films, parodies of well-known series, or humorous takes on cinematic tropes.",
         user_description="мемы, связанные с фильмами, ТВ-шоу и персонажами",
     ),
-    "спорт": Topic(
-        name="спорт",
-        chatgpt_description="Memes about sports events, athletes, or humorous takes on sports culture. Examples include memes about football, hockey, or other sports, particularly during major sporting events.",
-        user_description="мемы о спортивных событиях и забавных ситуациях в спорте",
-    ),
     "интернет-культура": Topic(
         name="интернет-культура",
         chatgpt_description="Memes about internet trends, viral content, and online humor. Examples include self-referential memes about meme culture, viral challenges, or internet phenomena.",
