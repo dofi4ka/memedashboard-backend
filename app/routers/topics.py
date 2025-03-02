@@ -13,4 +13,4 @@ logger = AdvancedLogger("topics_router")
 
 @topics_router.get("/topics")
 async def get_topics():
-    return {"topics": [{"name": topic.name, "description": topic.user_description} for topic in topics]}
+    return {"topics": [{"name": topic.name, "description": topic.user_description} for topic in topics.values()]}
